@@ -483,6 +483,7 @@ class PageLogout(ctk.CTkFrame):
         ctk.CTkLabel(card, text="🚪 Konfirmasi Keluar", font=ctk.CTkFont(size=20, weight="bold")).pack(pady=(40, 15))
         ctk.CTkLabel(card, text="Apakah Anda yakin ingin keluar dan menutup sesi aplikasi?", text_color="#64748b").pack(pady=(0, 30))
         
+        
         bc = ctk.CTkFrame(card, fg_color="transparent")
         bc.pack(fill="x", padx=40)
         

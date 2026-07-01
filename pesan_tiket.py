@@ -176,14 +176,14 @@ class PagePesanTiket(ctk.CTkFrame):
 
     def buat_konten_banner(self):
         badge = ctk.CTkLabel(
-            self.banner_frame, text="🌴 Jelajahi Keindahan Indonesia",
+            self.banner_frame, text="🌴 Gass Dolann",
             font=ctk.CTkFont(family="Segoe UI", size=11, weight="bold"),
             fg_color="white", text_color="#2563eb", corner_radius=20, padx=12, height=24
         )
         badge.pack(anchor="w", padx=40, pady=(60, 0))
 
         lbl_main = ctk.CTkLabel(
-            self.banner_frame, text="Wujudkan Liburan\nImpianmu",
+            self.banner_frame, text="Gass \nDolann",
             font=ctk.CTkFont(family="Segoe UI", size=36, weight="bold"),
             text_color="white", justify="left"
         )
@@ -191,7 +191,7 @@ class PagePesanTiket(ctk.CTkFrame):
 
         lbl_desc = ctk.CTkLabel(
             self.banner_frame, 
-            text="Pesan tiket wisata favorit Anda dengan mudah,\ncepat, dan aman tanpa antre.",
+            text="Pesan tiket wisata favorit Anda dengan mudah,\ncepat, dan aman tanpa antri.",
             font=ctk.CTkFont(family="Segoe UI", size=14), text_color="#e0f2fe", justify="left"
         )
         lbl_desc.pack(anchor="w", padx=40, pady=(10, 0))
