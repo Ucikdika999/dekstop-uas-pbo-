@@ -17,6 +17,7 @@ DB = {
         {"id":1,"username":"admin","password":hash_pw("admin123"),"email":"admin@tiket.com","phone":"081234567890","role":"admin","created_at":"2025-01-01"},
         {"id":2,"username":"budi","password":hash_pw("budi123"),"email":"budi@email.com","phone":"081111111111","role":"user","created_at":"2025-03-10"},
         {"id":3,"username":"sari","password":hash_pw("sari123"),"email":"sari@email.com","phone":"082222222222","role":"user","created_at":"2025-04-05"},
+        {"id":4,"username":"rara","password":hash_pw("rara123"),"email":"rara@email.com","phone":"083333333333","role":"user","created_at":"2025-05-20"},
     ],
     "destinasi": [
         {"id":1,"nama":"Candi Borobudur","lokasi":"Magelang","deskripsi":"Candi Buddha terbesar di dunia","harga":50000,"kapasitas":500,"tersedia":480,"kategori":"Budaya"},
@@ -50,7 +51,7 @@ DB = {
         {"id":3,"user_id":3,"action":"login","waktu":"2025-06-02 10:00"},
         {"id":4,"user_id":2,"action":"booking:TKT-CONTOH1","waktu":"2025-06-01 10:05"},
     ],
-    "_ctr": {"users":4,"destinasi":11,"tiket":4,"pembayaran":4,"pesan":3,"visitor_log":5},
+    "_ctr": {"users":5,"destinasi":11,"tiket":4,"pembayaran":4,"pesan":3,"visitor_log":5},
 }
 
 def nid(table):
@@ -236,6 +237,9 @@ class App(tk.Tk):
     # ══════════════════════════════════════════════════
     #  REGISTER
     # ══════════════════════════════════════════════════
+    def _register(self):
+        self.register_user()
+
     def register_user(self):
         self._clr()
         outer = tk.Frame(self,bg=C["bg"]); outer.pack(fill="both",expand=True)

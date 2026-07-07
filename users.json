@@ -1,0 +1,18 @@
+{
+    "dikakecill": {
+        "password": "password123",
+        "nama_lengkap": "dikakecill",
+        "email": "dikakecill@example.com",
+        "telp": "081234567890"
+    },
+    "dika": {
+        "password": "12345",
+        "nama_lengkap": "dika",
+        "email": "dika@example.com",
+        "telp": "081234567890"
+    },
+    "abell": {
+        "password": "12345",
+        "email": "abell@gmail.com"
+    }
+}

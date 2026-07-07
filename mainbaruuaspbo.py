@@ -4,6 +4,55 @@ import matplotlib
 matplotlib.use("TkAgg")
 from matplotlib.figure import Figure
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+import json
+import os
+
+# ==============================================================================
+# 0. SISTEM PENYIMPANAN AKUN BERBASIS JSON (PENGGANTI HARDCODE 1 AKUN)
+# ==============================================================================
+FILE_USERS = "users.json"
+
+def load_users():
+    """Membaca database akun dari file JSON. Jika belum ada, buat file baru
+    dengan 1 akun default (usyikkk/123) supaya aplikasi tetap bisa dites."""
+    if not os.path.exists(FILE_USERS):
+        default_data = {
+            "usyikkk": {
+                "password": "123",
+                "email": "usyikkk@pbo_uas.com"
+            }
+        }
+        save_users(default_data)
+        return default_data
+
+    try:
+        with open(FILE_USERS, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except (json.JSONDecodeError, FileNotFoundError):
+        return {}
+
+def save_users(data):
+    """Menyimpan/menulis ulang seluruh database akun ke file JSON."""
+    with open(FILE_USERS, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=4, ensure_ascii=False)
+
+def tambah_user(username, password, email=""):
+    """Menambahkan akun baru ke JSON. Return True jika sukses,
+    False jika username sudah dipakai."""
+    users = load_users()
+    if username in users:
+        return False
+    users[username] = {"password": password, "email": email}
+    save_users(users)
+    return True
+
+def cek_login(username, password):
+    """Mengecek kombinasi username & password terhadap database JSON."""
+    users = load_users()
+    if username in users and users[username]["password"] == password:
+        return True
+    return False
+
 
 # ==============================================================================
 # 1. APPLICATION CONTROLLER (PENGENDALI UTAMA WINDOW & NAVIGASI SIDEBAR)
@@ -11,14 +60,17 @@ from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 class AplikasiUtama(ctk.CTk):
     def __init__(self):
         super().__init__()
-        
+
         self.title("WisataApps - Manajemen Tracking & Booking Tiket")
-        self.geometry("1280(x)760")
+        self.geometry("1280x760")
         self.minsize(1100, 650)
-        
+
         # Sesuai mockup: Light Mode Cerah Elegan
         ctk.set_appearance_mode("Light")
         ctk.set_default_color_theme("blue")
+
+        # Menyimpan username yang sedang login (dipakai di halaman lain)
+        self.username_aktif = None
 
         # Layout Split Utama (Kolom 0: Sidebar, Kolom 1: Halaman Konten)
         self.grid_columnconfigure(0, weight=0)
@@ -37,7 +89,7 @@ class AplikasiUtama(ctk.CTk):
         self.frames = {}
 
         # Mendaftarkan seluruh kelas halaman ke dalam sistem penumpukan frame (Raise Page)
-        for PageClass in (PageLogin, PageRegister, PageDashboardUtama, PageDestinasi, 
+        for PageClass in (PageLogin, PageRegister, PageDashboardUtama, PageDestinasi,
                           PagePesanTiket, PageRiwayatTiket, PageProfilAkun, PageLogout):
             page_name = PageClass.__name__
             frame = PageClass(parent=self.container_halaman, controller=self)
@@ -50,6 +102,11 @@ class AplikasiUtama(ctk.CTk):
     def show_frame(self, page_name):
         """Mengangkat frame ke paling atas dan mengatur status kemunculan sidebar"""
         frame = self.frames[page_name]
+
+        # Refresh data yang bergantung pada user aktif (mis. Dashboard & Profil)
+        if hasattr(frame, "refresh_data"):
+            frame.refresh_data()
+
         frame.tkraise()
 
         if page_name in ["PageLogin", "PageRegister"]:
@@ -61,7 +118,7 @@ class AplikasiUtama(ctk.CTk):
     def tampilkan_sidebar(self):
         if self.sidebar_frame is not None:
             return
-            
+
         self.grid_columnconfigure(0, weight=2, minsize=240)
         self.sidebar_frame = ctk.CTkFrame(self, fg_color=("#ffffff", "#1e293b"), corner_radius=0, border_width=1, border_color=("#e2e8f0", "#334155"))
         self.sidebar_frame.grid(row=0, column=0, sticky="nsew", padx=0, pady=0)
@@ -115,78 +172,110 @@ class AplikasiUtama(ctk.CTk):
 
 
 # ==============================================================================
-# 2. FRAME HALAMAN: LOGIN
+# 2. FRAME HALAMAN: LOGIN (SEKARANG CEK KE JSON, BUKAN HARDCODE 1 AKUN)
 # ==============================================================================
 class PageLogin(ctk.CTkFrame):
     def __init__(self, parent, controller):
         super().__init__(parent)
         self.controller = controller
         self.configure(fg_color=("#f8fafc", "#0f172a"))
-        
+
         box = ctk.CTkFrame(self, width=420, height=520, corner_radius=20, fg_color=("#ffffff", "#1e293b"), border_width=1, border_color=("#e2e8f0", "#334155"))
         box.place(relx=0.5, rely=0.5, anchor="center")
         box.pack_propagate(False)
-        
+
         ctk.CTkLabel(box, text="🔒 Login Akun", font=ctk.CTkFont(family="Segoe UI", size=24, weight="bold")).pack(pady=(40, 30))
-        
+
         ctk.CTkLabel(box, text="Username", font=ctk.CTkFont(size=11, weight="bold"), text_color="gray").pack(anchor="w", padx=45)
         self.entry_user = ctk.CTkEntry(box, width=330, height=40, placeholder_text="Masukkan nama pengguna...")
         self.entry_user.pack(pady=(2, 15))
-        
+
         ctk.CTkLabel(box, text="Password", font=ctk.CTkFont(size=11, weight="bold"), text_color="gray").pack(anchor="w", padx=45)
         self.entry_pass = ctk.CTkEntry(box, width=330, height=40, placeholder_text="Masukkan kata sandi...", show="*")
         self.entry_pass.pack(pady=(2, 25))
-        
+
         btn_login = ctk.CTkButton(box, text="Masuk Aplikasi", width=330, height=44, corner_radius=12, font=ctk.CTkFont(weight="bold"), fg_color="#2563eb", command=self.proses_login)
         btn_login.pack(pady=10)
-        
+
         btn_ke_reg = ctk.CTkButton(box, text="Belum punya akun? Daftar disini", fg_color="transparent", text_color="#2563eb", command=lambda: self.controller.show_frame("PageRegister"))
         btn_ke_reg.pack()
 
+        # Bind Enter key supaya bisa langsung login tanpa klik tombol
+        self.entry_pass.bind("<Return>", lambda event: self.proses_login())
+
     def proses_login(self):
-        u = self.entry_user.get()
+        u = self.entry_user.get().strip()
         p = self.entry_pass.get()
-        if u == "usyikkk" and p == "123":
+
+        if u == "" or p == "":
+            messagebox.showwarning("Peringatan", "Username dan Password wajib diisi!")
+            return
+
+        if cek_login(u, p):
+            self.controller.username_aktif = u
+            self.entry_user.delete(0, "end")
+            self.entry_pass.delete(0, "end")
             self.controller.show_frame("PageDashboardUtama")
         else:
-            messagebox.showerror("Gagal", "Username atau Password salah! (Akun dev: usyikkk / 123)")
+            messagebox.showerror("Gagal", "Username atau Password salah, atau akun belum terdaftar!")
 
 
 # ==============================================================================
-# 3. FRAME HALAMAN: REGISTER
+# 3. FRAME HALAMAN: REGISTER (SEKARANG SIMPAN AKUN BARU KE JSON)
 # ==============================================================================
 class PageRegister(ctk.CTkFrame):
     def __init__(self, parent, controller):
         super().__init__(parent)
         self.controller = controller
         self.configure(fg_color=("#f8fafc", "#0f172a"))
-        
-        box = ctk.CTkFrame(self, width=420, height=520, corner_radius=20, fg_color=("#ffffff", "#1e293b"), border_width=1, border_color=("#e2e8f0", "#334155"))
+
+        box = ctk.CTkFrame(self, width=420, height=560, corner_radius=20, fg_color=("#ffffff", "#1e293b"), border_width=1, border_color=("#e2e8f0", "#334155"))
         box.place(relx=0.5, rely=0.5, anchor="center")
         box.pack_propagate(False)
-        
-        ctk.CTkLabel(box, text="📝 Registrasi Akun", font=ctk.CTkFont(family="Segoe UI", size=24, weight="bold")).pack(pady=(40, 30))
-        
+
+        ctk.CTkLabel(box, text="📝 Registrasi Akun", font=ctk.CTkFont(family="Segoe UI", size=24, weight="bold")).pack(pady=(40, 25))
+
         ctk.CTkLabel(box, text="Username Baru", font=ctk.CTkFont(size=11, weight="bold"), text_color="gray").pack(anchor="w", padx=45)
         self.entry_user_reg = ctk.CTkEntry(box, width=330, height=40, placeholder_text="Buat nama pengguna...")
         self.entry_user_reg.pack(pady=(2, 15))
-        
+
+        ctk.CTkLabel(box, text="Email", font=ctk.CTkFont(size=11, weight="bold"), text_color="gray").pack(anchor="w", padx=45)
+        self.entry_email_reg = ctk.CTkEntry(box, width=330, height=40, placeholder_text="Masukkan alamat email...")
+        self.entry_email_reg.pack(pady=(2, 15))
+
         ctk.CTkLabel(box, text="Password Baru", font=ctk.CTkFont(size=11, weight="bold"), text_color="gray").pack(anchor="w", padx=45)
         self.entry_pass_reg = ctk.CTkEntry(box, width=330, height=40, placeholder_text="Buat sandi aman...", show="*")
         self.entry_pass_reg.pack(pady=(2, 25))
-        
+
         btn_reg = ctk.CTkButton(box, text="Buat Akun Sekarang", width=330, height=44, corner_radius=12, fg_color="#10b981", font=ctk.CTkFont(weight="bold"), command=self.proses_register)
         btn_reg.pack(pady=10)
-        
+
         btn_ke_log = ctk.CTkButton(box, text="Sudah punya akun? Login", fg_color="transparent", text_color="#10b981", command=lambda: self.controller.show_frame("PageLogin"))
         btn_ke_log.pack()
 
     def proses_register(self):
-        if self.entry_user_reg.get().strip() == "" or self.entry_pass_reg.get().strip() == "":
-            messagebox.showwarning("Peringatan", "Form tidak boleh ada yang kosong!")
-        else:
-            messagebox.showinfo("Sukses", "Akun Berhasil Dibuat! Silakan login kembali.")
+        username = self.entry_user_reg.get().strip()
+        email = self.entry_email_reg.get().strip()
+        password = self.entry_pass_reg.get()
+
+        if username == "" or password == "":
+            messagebox.showwarning("Peringatan", "Username dan Password tidak boleh kosong!")
+            return
+
+        if len(password) < 3:
+            messagebox.showwarning("Peringatan", "Password minimal 3 karakter!")
+            return
+
+        sukses = tambah_user(username, password, email)
+
+        if sukses:
+            messagebox.showinfo("Sukses", f"Akun '{username}' berhasil dibuat! Silakan login kembali.")
+            self.entry_user_reg.delete(0, "end")
+            self.entry_email_reg.delete(0, "end")
+            self.entry_pass_reg.delete(0, "end")
             self.controller.show_frame("PageLogin")
+        else:
+            messagebox.showerror("Gagal", f"Username '{username}' sudah digunakan, silakan pilih username lain!")
 
 
 # ==============================================================================
@@ -200,7 +289,8 @@ class PageDashboardUtama(ctk.CTkFrame):
         # Header Area
         header_frame = ctk.CTkFrame(self, fg_color="transparent")
         header_frame.pack(fill="x", padx=35, pady=(30, 15))
-        ctk.CTkLabel(header_frame, text="Selamat datang kembali, usyikkk! 👋", font=ctk.CTkFont(family="Segoe UI", size=26, weight="bold")).pack(anchor="w")
+        self.lbl_sambutan = ctk.CTkLabel(header_frame, text="Selamat datang kembali! 👋", font=ctk.CTkFont(family="Segoe UI", size=26, weight="bold"))
+        self.lbl_sambutan.pack(anchor="w")
         ctk.CTkLabel(header_frame, text="Pantau ringkasan log pelacakan kuota serta statistik transaksi booking tiket.", font=ctk.CTkFont(size=13), text_color="#64748b").pack(anchor="w", pady=2)
 
         # Split Konten Utama
@@ -232,7 +322,7 @@ class PageDashboardUtama(ctk.CTkFrame):
 
         canvas = FigureCanvasTkAgg(fig, master=chart_card)
         canvas.draw()
-        canvas.get_tk_widget().pack(fill="both", expand=True, padx=15, pady=(0,10))
+        canvas.get_tk_widget().pack(fill="both", expand=True, padx=15, pady=(0, 10))
 
         # Kanan: Daftar Destinasi Populer Favorit
         pop_card = ctk.CTkFrame(main_layout, fg_color=("#ffffff", "#1e293b"), corner_radius=16, border_width=1, border_color=("#e2e8f0", "#334155"))
@@ -244,17 +334,23 @@ class PageDashboardUtama(ctk.CTkFrame):
             {"nama": "Candi Borobudur", "lokasi": "Magelang", "kunjungan": "980 visit", "icon": "🗿"},
             {"nama": "Solo Safari", "lokasi": "Surakarta", "kunjungan": "850 visit", "icon": "🦁"}
         ]
-        
+
         for i, data in enumerate(pop_data):
             row = ctk.CTkFrame(pop_card, fg_color="transparent")
             row.pack(fill="x", padx=20, pady=8)
-            ctk.CTkLabel(row, text=str(i+1), font=ctk.CTkFont(size=12, weight="bold"), fg_color=("#edf2ff", "#131b2e"), text_color="#5a51e6", width=26, height=26, corner_radius=13).pack(side="left", padx=(0, 10))
-            
+            ctk.CTkLabel(row, text=str(i + 1), font=ctk.CTkFont(size=12, weight="bold"), fg_color=("#edf2ff", "#131b2e"), text_color="#5a51e6", width=26, height=26, corner_radius=13).pack(side="left", padx=(0, 10))
+
             fd = ctk.CTkFrame(row, fg_color="transparent")
             fd.pack(side="left", fill="both", expand=True)
             ctk.CTkLabel(fd, text=f"{data['icon']} {data['nama']}", font=ctk.CTkFont(size=13, weight="bold")).pack(anchor="w")
             ctk.CTkLabel(fd, text=data["lokasi"], font=ctk.CTkFont(size=11), text_color="#64748b").pack(anchor="w")
             ctk.CTkLabel(row, text=data["kunjungan"], font=ctk.CTkFont(size=12, weight="bold"), text_color="#475569").pack(side="right", padx=10)
+
+    def refresh_data(self):
+        """Dipanggil setiap kali halaman ini ditampilkan agar sapaan sesuai
+        dengan username yang sedang login (bukan nama yang di-hardcode)."""
+        username = getattr(self.controller, "username_aktif", None) or "Pengguna"
+        self.lbl_sambutan.configure(text=f"Selamat datang kembali, {username}! 👋")
 
 
 # ==============================================================================
@@ -285,17 +381,17 @@ class PageDestinasi(ctk.CTkFrame):
         for idx, item in enumerate(self.DATA_DESTINASI):
             r = idx // 2
             c = idx % 2
-            
+
             card = ctk.CTkFrame(grid_container, fg_color=("#ffffff", "#1e293b"), corner_radius=14, border_width=1, border_color=("#e2e8f0", "#334155"))
             card.grid(row=r, column=c, padx=8, pady=8, sticky="nsew")
-            
+
             ctk.CTkLabel(card, text=item["nama"], font=ctk.CTkFont(family="Segoe UI", size=16, weight="bold")).pack(anchor="w", padx=18, pady=(12, 2))
             ctk.CTkLabel(card, text=f"📍 {item['lokasi']}", font=ctk.CTkFont(size=11), text_color="#64748b").pack(anchor="w", padx=18)
-            
+
             prog = ctk.CTkProgressBar(card, progress_color=item["warna"], height=6, corner_radius=3)
             prog.pack(fill="x", padx=18, pady=12)
             prog.set(item["kuota"] / item["max"])
-            
+
             bot_frame = ctk.CTkFrame(card, fg_color="transparent")
             bot_frame.pack(fill="x", padx=18, pady=(0, 12))
             ctk.CTkLabel(bot_frame, text=f"Sisa: {item['kuota']}/{item['max']} ({item['status']})", font=ctk.CTkFont(size=11, weight="bold"), text_color=item["warna"]).pack(side="left")
@@ -338,7 +434,7 @@ class PagePesanTiket(ctk.CTkFrame):
         # Kanan: Formulir Pemesanan Interaktif
         fc = ctk.CTkScrollableFrame(self, fg_color="transparent")
         fc.grid(row=0, column=1, sticky="nsew", padx=40, pady=30)
-        
+
         ctk.CTkLabel(fc, text="Booking Tiket Online", font=ctk.CTkFont(size=24, weight="bold")).pack(pady=(10, 20))
 
         self.buat_lbl(fc, "Pilih Destinasi Wisata")
@@ -396,7 +492,8 @@ class PagePesanTiket(ctk.CTkFrame):
         self.lbl_sisa_kuota.configure(text=f"🕒 Tersedia: {info['kuota']} tiket live saat ini")
 
     def proses_simpan_booking(self):
-        messagebox.showinfo("Booking Berhasil 🎉", f"Terima kasih, usyikkk!\nPemesanan tiket {self.opt_destinasi.get()} sebanyak {self.jumlah_tiket} slot sukses dilakukan!")
+        username = getattr(self.controller, "username_aktif", None) or "Pengguna"
+        messagebox.showinfo("Booking Berhasil 🎉", f"Terima kasih, {username}!\nPemesanan tiket {self.opt_destinasi.get()} sebanyak {self.jumlah_tiket} slot sukses dilakukan!")
 
 
 # ==============================================================================
@@ -416,7 +513,7 @@ class PageRiwayatTiket(ctk.CTkFrame):
 
         ht = ctk.CTkFrame(tc, fg_color=("#f8fafc", "#131b2e"), height=40, corner_radius=8)
         ht.pack(fill="x", padx=20, pady=(20, 10))
-        
+
         cols = [("KODE TIKET", 0.02), ("TANGGAL", 0.20), ("DESTINASI WISATA", 0.40), ("JUMLAH", 0.68), ("TOTAL", 0.78), ("STATUS", 0.90)]
         for text, relx in cols:
             ctk.CTkLabel(ht, text=text, font=ctk.CTkFont(size=11, weight="bold"), text_color="#64748b").place(relx=relx, rely=0.5, anchor="w")
@@ -429,43 +526,66 @@ class PageRiwayatTiket(ctk.CTkFrame):
         for item in data_riwayat:
             row = ctk.CTkFrame(tc, fg_color="transparent", height=60)
             row.pack(fill="x", padx=20, pady=4)
-            
+
             ctk.CTkLabel(row, text=item["kode"], font=ctk.CTkFont(size=13, weight="bold"), text_color="#5a51e6").place(relx=0.02, rely=0.5, anchor="w")
             ctk.CTkLabel(row, text=item["tgl"], font=ctk.CTkFont(size=12)).place(relx=0.20, rely=0.5, anchor="w")
             ctk.CTkLabel(row, text=item["wisata"], font=ctk.CTkFont(size=13, weight="bold")).place(relx=0.40, rely=0.5, anchor="w")
             ctk.CTkLabel(row, text=item["qty"], font=ctk.CTkFont(size=12)).place(relx=0.68, rely=0.5, anchor="w")
             ctk.CTkLabel(row, text=item["total"], font=ctk.CTkFont(size=13, weight="bold")).place(relx=0.78, rely=0.5, anchor="w")
             ctk.CTkLabel(row, text=item["status"], font=ctk.CTkFont(size=10, weight="bold"), fg_color=item["bg"], text_color=item["fg"], corner_radius=6, width=75, height=24).place(relx=0.90, rely=0.5, anchor="w")
-            
+
             ctk.CTkFrame(tc, fg_color=("#f1f5f9", "#334155"), height=1).pack(fill="x", padx=20, pady=2)
 
 
 # ==============================================================================
-# 8. FRAME HALAMAN: PROFIL AKUN PENGGUNA
+# 8. FRAME HALAMAN: PROFIL AKUN PENGGUNA (SEKARANG MENAMPILKAN DATA DARI JSON)
 # ==============================================================================
 class PageProfilAkun(ctk.CTkFrame):
     def __init__(self, parent, controller=None):
         super().__init__(parent, fg_color=("#f8fafc", "#0f172a"))
         self.controller = controller
-        
+
         card = ctk.CTkFrame(self, width=500, height=450, corner_radius=24, fg_color=("#ffffff", "#1e293b"), border_width=1, border_color=("#e2e8f0", "#334155"))
         card.place(relx=0.5, rely=0.5, anchor="center")
         card.pack_propagate(False)
-        
+
         ctk.CTkLabel(card, text="👤 Profil Pengguna", font=ctk.CTkFont(size=22, weight="bold")).pack(pady=30)
-        
-        self.ent_nama = ctk.CTkEntry(card, width=400, height=44, placeholder_text="Nama Lengkap")
+
+        self.ent_nama = ctk.CTkEntry(card, width=400, height=44, placeholder_text="Nama Lengkap (Username)")
         self.ent_nama.pack(pady=10)
-        self.ent_nama.insert(0, "usyikkk")
-        
+
         self.ent_email = ctk.CTkEntry(card, width=400, height=44, placeholder_text="Alamat Email")
         self.ent_email.pack(pady=10)
-        self.ent_email.insert(0, "usyikkk@pbo_uas.com")
-        
+
         ctk.CTkButton(card, text="Simpan Perubahan Profil", width=400, height=44, corner_radius=12, fg_color="#2563eb", font=ctk.CTkFont(weight="bold"), command=self.aksi_simpan).pack(pady=20)
 
+    def refresh_data(self):
+        """Mengisi ulang form dengan data akun yang sedang login dari JSON."""
+        username = getattr(self.controller, "username_aktif", None)
+        users = load_users()
+
+        self.ent_nama.configure(state="normal")
+        self.ent_nama.delete(0, "end")
+        self.ent_email.delete(0, "end")
+
+        if username and username in users:
+            self.ent_nama.insert(0, username)
+            self.ent_email.insert(0, users[username].get("email", ""))
+
+        # Username sebagai identitas kunci JSON tidak diubah lewat form ini
+        self.ent_nama.configure(state="disabled")
+
     def aksi_simpan(self):
-        messagebox.showinfo("Sukses", f"Profil atas nama {self.ent_nama.get()} berhasil diperbarui!")
+        username = getattr(self.controller, "username_aktif", None)
+        if not username:
+            messagebox.showerror("Gagal", "Tidak ada sesi login aktif!")
+            return
+
+        users = load_users()
+        if username in users:
+            users[username]["email"] = self.ent_email.get().strip()
+            save_users(users)
+            messagebox.showinfo("Sukses", f"Profil atas nama {username} berhasil diperbarui!")
 
 
 # ==============================================================================
@@ -475,20 +595,24 @@ class PageLogout(ctk.CTkFrame):
     def __init__(self, parent, controller=None):
         super().__init__(parent, fg_color=("#f1f5f9", "#0f172a"))
         self.controller = controller
-        
+
         card = ctk.CTkFrame(self, width=450, height=260, corner_radius=20, fg_color=("#ffffff", "#1e293b"))
         card.place(relx=0.5, rely=0.5, anchor="center")
         card.pack_propagate(False)
-        
+
         ctk.CTkLabel(card, text="🚪 Konfirmasi Keluar", font=ctk.CTkFont(size=20, weight="bold")).pack(pady=(40, 15))
         ctk.CTkLabel(card, text="Apakah Anda yakin ingin keluar dan menutup sesi aplikasi?", text_color="#64748b").pack(pady=(0, 30))
-        
-        
+
         bc = ctk.CTkFrame(card, fg_color="transparent")
         bc.pack(fill="x", padx=40)
-        
+
         ctk.CTkButton(bc, text="Batal", width=160, height=40, fg_color=("#e2e8f0", "#334155"), text_color=("#0f172a", "#f8fafc"), command=lambda: self.controller.show_frame("PageDashboardUtama")).pack(side="left")
-        ctk.CTkButton(bc, text="Ya, Keluar", width=160, height=40, fg_color="#ef4444", hover_color="#dc2626", command=self.quit).pack(side="right")
+        ctk.CTkButton(bc, text="Ya, Keluar", width=160, height=40, fg_color="#ef4444", hover_color="#dc2626", command=self.aksi_logout).pack(side="right")
+
+    def aksi_logout(self):
+        # Reset sesi username aktif sebelum menutup ke halaman Login
+        self.controller.username_aktif = None
+        self.controller.show_frame("PageLogin")
 
 
 # ==============================================================================
