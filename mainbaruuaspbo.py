@@ -12,6 +12,11 @@ import os
 # ==============================================================================
 FILE_USERS = "users.json"
 
+# Kredensial Admin sengaja DIPISAH dari users.json (bukan akun biasa),
+# supaya tidak bisa didaftarkan ulang lewat form Register.
+ADMIN_USERNAME = "admin"
+ADMIN_PASSWORD = "admin123"
+
 def load_users():
     """Membaca database akun dari file JSON. Jika belum ada, buat file baru
     dengan 1 akun default (usyikkk/123) supaya aplikasi tetap bisa dites."""
@@ -53,6 +58,16 @@ def cek_login(username, password):
         return True
     return False
 
+def hapus_user(username):
+    """Menghapus 1 akun dari database JSON. Dipakai oleh Panel Admin.
+    Return True jika berhasil dihapus, False jika username tidak ditemukan."""
+    users = load_users()
+    if username in users:
+        del users[username]
+        save_users(users)
+        return True
+    return False
+
 
 # ==============================================================================
 # 1. APPLICATION CONTROLLER (PENGENDALI UTAMA WINDOW & NAVIGASI SIDEBAR)
@@ -89,8 +104,10 @@ class AplikasiUtama(ctk.CTk):
         self.frames = {}
 
         # Mendaftarkan seluruh kelas halaman ke dalam sistem penumpukan frame (Raise Page)
+        # PageAdminPanel ditambahkan di sini sebagai halaman baru untuk Admin
         for PageClass in (PageLogin, PageRegister, PageDashboardUtama, PageDestinasi,
-                          PagePesanTiket, PageRiwayatTiket, PageProfilAkun, PageLogout):
+                          PagePesanTiket, PageRiwayatTiket, PageProfilAkun, PageLogout,
+                          PageAdminPanel):
             page_name = PageClass.__name__
             frame = PageClass(parent=self.container_halaman, controller=self)
             self.frames[page_name] = frame
@@ -103,13 +120,14 @@ class AplikasiUtama(ctk.CTk):
         """Mengangkat frame ke paling atas dan mengatur status kemunculan sidebar"""
         frame = self.frames[page_name]
 
-        # Refresh data yang bergantung pada user aktif (mis. Dashboard & Profil)
+        # Refresh data yang bergantung pada user aktif (mis. Dashboard, Profil, & Admin)
         if hasattr(frame, "refresh_data"):
             frame.refresh_data()
 
         frame.tkraise()
 
-        if page_name in ["PageLogin", "PageRegister"]:
+        # Panel Admin sengaja TIDAK memakai sidebar biasa (konteksnya beda dari user biasa)
+        if page_name in ["PageLogin", "PageRegister", "PageAdminPanel"]:
             self.sembunyikan_sidebar()
         else:
             self.tampilkan_sidebar()
@@ -172,7 +190,7 @@ class AplikasiUtama(ctk.CTk):
 
 
 # ==============================================================================
-# 2. FRAME HALAMAN: LOGIN (SEKARANG CEK KE JSON, BUKAN HARDCODE 1 AKUN)
+# 2. FRAME HALAMAN: LOGIN (SEKARANG CEK KE JSON, DITAMBAH JALUR KHUSUS ADMIN)
 # ==============================================================================
 class PageLogin(ctk.CTkFrame):
     def __init__(self, parent, controller):
@@ -200,6 +218,8 @@ class PageLogin(ctk.CTkFrame):
         btn_ke_reg = ctk.CTkButton(box, text="Belum punya akun? Daftar disini", fg_color="transparent", text_color="#2563eb", command=lambda: self.controller.show_frame("PageRegister"))
         btn_ke_reg.pack()
 
+        ctk.CTkLabel(box, text="🛡️ Login sebagai admin? Gunakan akun admin Anda.", font=ctk.CTkFont(size=10), text_color="#94a3b8").pack(pady=(15, 0))
+
         # Bind Enter key supaya bisa langsung login tanpa klik tombol
         self.entry_pass.bind("<Return>", lambda event: self.proses_login())
 
@@ -211,6 +231,16 @@ class PageLogin(ctk.CTkFrame):
             messagebox.showwarning("Peringatan", "Username dan Password wajib diisi!")
             return
 
+        # --- JALUR KHUSUS ADMIN ---
+        # Dicek DULUAN sebelum cek ke users.json, karena admin bukan akun biasa.
+        if u == ADMIN_USERNAME and p == ADMIN_PASSWORD:
+            self.controller.username_aktif = u
+            self.entry_user.delete(0, "end")
+            self.entry_pass.delete(0, "end")
+            self.controller.show_frame("PageAdminPanel")
+            return
+
+        # --- JALUR LOGIN USER BIASA (dari users.json) ---
         if cek_login(u, p):
             self.controller.username_aktif = u
             self.entry_user.delete(0, "end")
@@ -264,6 +294,11 @@ class PageRegister(ctk.CTkFrame):
 
         if len(password) < 3:
             messagebox.showwarning("Peringatan", "Password minimal 3 karakter!")
+            return
+
+        # Cegah user mendaftar dengan username yang sama seperti akun Admin
+        if username == ADMIN_USERNAME:
+            messagebox.showerror("Gagal", "Username tersebut tidak dapat digunakan!")
             return
 
         sukses = tambah_user(username, password, email)
@@ -426,9 +461,9 @@ class PagePesanTiket(ctk.CTkFrame):
         self.grid_rowconfigure(0, weight=1)
 
         # Kiri: Banner Info Visual
-        bf = ctk.CTkFrame(self, fg_color=("#3b82f6", "#1e3a8a"), corner_radius=0)
+        bf = ctk.CTkFrame(self, fg_color=("#3b82f6", "#e6e8ee"), corner_radius=0)
         bf.grid(row=0, column=0, sticky="nsew")
-        ctk.CTkLabel(bf, text="🌴 Jelajahi Keindahan Indonesia", font=ctk.CTkFont(size=11, weight="bold"), fg_color="white", text_color="#2563eb", corner_radius=20, padx=12, height=24).pack(anchor="w", padx=40, pady=(60, 0))
+        ctk.CTkLabel(bf, text="🌴 Jelajahi Keindahan Indonesia", font=ctk.CTkFont(size=11, weight="bold"), fg_color="white", text_color="#9a9ca2", corner_radius=20, padx=12, height=24).pack(anchor="w", padx=40, pady=(60, 0))
         ctk.CTkLabel(bf, text="Wujudkan Liburan\nImpianmu", font=ctk.CTkFont(size=36, weight="bold"), text_color="white", justify="left").pack(anchor="w", padx=40, pady=(15, 0))
 
         # Kanan: Formulir Pemesanan Interaktif
@@ -611,6 +646,118 @@ class PageLogout(ctk.CTkFrame):
 
     def aksi_logout(self):
         # Reset sesi username aktif sebelum menutup ke halaman Login
+        self.controller.username_aktif = None
+        self.controller.show_frame("PageLogin")
+
+
+# ==============================================================================
+# 10. FRAME HALAMAN: DASHBOARD ADMIN (BARU) — Statistik + Kelola Akun Pengguna
+# ==============================================================================
+class PageAdminPanel(ctk.CTkFrame):
+    def __init__(self, parent, controller=None):
+        super().__init__(parent, fg_color=("#f1f5f9", "#0f172a"))
+        self.controller = controller
+
+        # ------------------------------------------------------------------
+        # 1. HEADER + tombol logout admin
+        # ------------------------------------------------------------------
+        header_frame = ctk.CTkFrame(self, fg_color="transparent")
+        header_frame.pack(fill="x", padx=35, pady=(30, 15))
+
+        judul_frame = ctk.CTkFrame(header_frame, fg_color="transparent")
+        judul_frame.pack(side="left", fill="x", expand=True)
+        ctk.CTkLabel(judul_frame, text="🛡️ Dashboard Admin", font=ctk.CTkFont(family="Segoe UI", size=26, weight="bold")).pack(anchor="w")
+        ctk.CTkLabel(judul_frame, text="Ringkasan sistem dan manajemen seluruh akun pengguna.", font=ctk.CTkFont(size=13), text_color="#64748b").pack(anchor="w", pady=2)
+
+        ctk.CTkButton(header_frame, text="🚪 Logout", width=110, height=38, corner_radius=10, fg_color="#ef4444", hover_color="#dc2626", command=self.aksi_logout).pack(side="right", anchor="n", pady=5)
+
+        # ------------------------------------------------------------------
+        # 2. BARIS KARTU STATISTIK (mirip Dashboard user biasa)
+        # ------------------------------------------------------------------
+        stats_container = ctk.CTkFrame(self, fg_color="transparent")
+        stats_container.pack(fill="x", padx=35, pady=(0, 15))
+        stats_container.grid_columnconfigure((0, 1, 2), weight=1, uniform="equal")
+
+        self.lbl_total_akun = self._buat_kartu_statistik(stats_container, 0, "Total Akun Terdaftar", "0", "👥", "#3b82f6")
+        self._buat_kartu_statistik(stats_container, 1, "Total Destinasi Wisata", "5", "🗺️", "#10b981")
+        self._buat_kartu_statistik(stats_container, 2, "Total Live Kuota Aktif", "388", "🎟️", "#f59e0b")
+
+        # ------------------------------------------------------------------
+        # 3. SECTION: DAFTAR & KELOLA AKUN PENGGUNA
+        # ------------------------------------------------------------------
+        section_frame = ctk.CTkFrame(self, fg_color="transparent")
+        section_frame.pack(fill="both", expand=True, padx=35, pady=(5, 30))
+
+        ctk.CTkLabel(section_frame, text="📋 Daftar Akun Pengguna", font=ctk.CTkFont(family="Segoe UI", size=16, weight="bold")).pack(anchor="w", pady=(0, 10))
+
+        # Wadah daftar user (scrollable karena jumlah user bisa banyak)
+        self.list_container = ctk.CTkScrollableFrame(section_frame, fg_color=("#ffffff", "#1e293b"), corner_radius=16, border_width=1, border_color=("#e2e8f0", "#334155"))
+        self.list_container.pack(fill="both", expand=True)
+
+    def _buat_kartu_statistik(self, parent, col, title, value, icon, warna):
+        """Helper untuk bikin 1 kartu statistik. Return label value-nya
+        supaya bisa diupdate lagi lewat refresh_data()."""
+        card = ctk.CTkFrame(parent, fg_color=("#ffffff", "#1e293b"), corner_radius=16, border_width=1, border_color=("#e2e8f0", "#334155"))
+        card.grid(row=0, column=col, padx=8, pady=5, sticky="nsew")
+
+        frame_text = ctk.CTkFrame(card, fg_color="transparent")
+        frame_text.pack(side="left", padx=20, pady=18, fill="both", expand=True)
+
+        ctk.CTkLabel(frame_text, text=title, font=ctk.CTkFont(size=12, weight="bold"), text_color="#64748b").pack(anchor="w")
+        lbl_value = ctk.CTkLabel(frame_text, text=value, font=ctk.CTkFont(family="Segoe UI", size=24, weight="bold"))
+        lbl_value.pack(anchor="w", pady=4)
+
+        icon_bg = ctk.CTkFrame(card, width=46, height=46, corner_radius=23, fg_color=("#edf2ff", "#131b2e"))
+        icon_bg.pack(side="right", padx=18)
+        icon_bg.pack_propagate(False)
+        ctk.CTkLabel(icon_bg, text=icon, font=ctk.CTkFont(size=20)).place(relx=0.5, rely=0.5, anchor="center")
+
+        return lbl_value
+
+    def refresh_data(self):
+        """Memuat ulang statistik & daftar user setiap kali halaman ini
+        ditampilkan, supaya data selalu terbaru dari users.json."""
+        users = load_users()
+
+        # Update kartu statistik total akun
+        self.lbl_total_akun.configure(text=str(len(users)))
+
+        # Bersihkan daftar lama sebelum digambar ulang
+        for widget in self.list_container.winfo_children():
+            widget.destroy()
+
+        if not users:
+            ctk.CTkLabel(self.list_container, text="Belum ada akun pengguna yang terdaftar.", text_color="#64748b").pack(pady=30)
+            return
+
+        for username, data in users.items():
+            row = ctk.CTkFrame(self.list_container, fg_color=("#f8fafc", "#0f172a"), corner_radius=12)
+            row.pack(fill="x", padx=10, pady=6, ipady=10)
+
+            info_frame = ctk.CTkFrame(row, fg_color="transparent")
+            info_frame.pack(side="left", padx=18, fill="x", expand=True)
+            ctk.CTkLabel(info_frame, text=f"👤 {username}", font=ctk.CTkFont(size=14, weight="bold")).pack(anchor="w")
+            ctk.CTkLabel(info_frame, text=f"📧 {data.get('email', '(tidak ada email)')}", font=ctk.CTkFont(size=11), text_color="#64748b").pack(anchor="w")
+
+            ctk.CTkButton(
+                row, text="🗑️ Hapus", width=90, height=32, corner_radius=8,
+                fg_color="#ef4444", hover_color="#dc2626",
+                command=lambda u=username: self.aksi_hapus(u)
+            ).pack(side="right", padx=15)
+
+    def aksi_hapus(self, username):
+        konfirmasi = messagebox.askyesno(
+            "Konfirmasi Hapus",
+            f"Yakin ingin menghapus akun '{username}'?\nAksi ini tidak bisa dibatalkan."
+        )
+        if konfirmasi:
+            if hapus_user(username):
+                messagebox.showinfo("Berhasil", f"Akun '{username}' berhasil dihapus.")
+                self.refresh_data()
+            else:
+                messagebox.showerror("Gagal", f"Akun '{username}' tidak ditemukan.")
+
+    def aksi_logout(self):
         self.controller.username_aktif = None
         self.controller.show_frame("PageLogin")
 
